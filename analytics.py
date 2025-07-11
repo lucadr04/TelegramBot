@@ -1,3 +1,4 @@
+# Codice per controllare l'utilizzo dell'api e la disponibilità delle chiamate
 import os
 from dotenv import load_dotenv
 import requests
@@ -12,10 +13,8 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Make the GET request
 response = requests.get(url, headers=headers)
 
-# Check the response status
 if response.status_code == 200:
     data = response.json()
     for api in data.get('rateLimits', []):

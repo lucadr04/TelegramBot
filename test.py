@@ -1,3 +1,4 @@
+# Semplice funzione per testare browseAPI
 import json
 from browseapi import BrowseAPI
 import os

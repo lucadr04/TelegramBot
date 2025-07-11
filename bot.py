@@ -7,12 +7,11 @@ from browseapi import BrowseAPI
 from math import log10
 import asyncio
 
-# Informazioni aggiuntive ed elimino quelle ridondanti
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Necessario al debugging del bot telegram
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# .env 
+# .env e carico segreti
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 APP_ID = os.getenv("APP_ID")
@@ -21,10 +20,10 @@ USER_TOKEN = os.getenv("USER_TOKEN")
 
 ### SEZIONE DI INIZIALIZZAZIONE DEL BOT
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:      
-    context.user_data["data"] = {}
-    context.user_data["current"] = 0
-    
+# Comando /start, per inizializzare il bot
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  
+    init_variables(context)       
+
     # Messaggio introduttivo
     await update.message.reply_text(
         "Ciao! Sono un bot per cercare offerte su Ebay.\n"
@@ -33,7 +32,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Poi scrivimi un prodotto per iniziare!"
     )
 
-# Mostra le opzioni
+# Inizializzo i pochi valori necessari
+def init_variables(context):
+    if "location" not in context.user_data: context.user_data["location"] = "IT"                
+    if "sorting" not in context.user_data: context.user_data["sorting"] = "MyGrading" 
+
+# Comando /show, per mostrare le impostazioni di ricerca
 async def show(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     location = context.user_data.get("location")
     sorting = context.user_data.get("sorting")
@@ -45,7 +49,7 @@ async def show(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await update.message.reply_text(msg)
 
-# Seleziono l'opzione da modificare
+# Comando /setup, per modificare le impostazioni di ricerca
 async def setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Impostazioni. Il callback manager reindirizzerà all'handler scelto
     keyboard = [
@@ -53,12 +57,14 @@ async def setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton("Specifica zona", callback_data=str("handler_location"))],
     ]
 
+    # Inline keyboard per scegliere l'impostazione da modificare
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Quale impostazione vuoi modificare?", 
                                     reply_markup=reply_markup)
 
 # Seleziono il sorting
 async def sorting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Metodi di sorting
     keyboard = [
         [InlineKeyboardButton("Prezzo totale minore", callback_data=str("set_sorting_MinTotPrice"))],
         [
@@ -70,11 +76,14 @@ async def sorting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton("Grading sperimentale", callback_data=str("set_sorting_MyGrading"))],
     ]
 
+    # Inline keyboard per scegliere il metodo di sorting
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.edit_message_text("Scegli il tipo di sorting", 
                                                    reply_markup=reply_markup)
 
+# Seleziono il luogo di ricerca
 async def location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Luoghi disponibili
     keyboard = [
         [InlineKeyboardButton("Italia IT", callback_data=str("set_location_IT"))],
         [InlineKeyboardButton("Germania DE", callback_data=str("set_location_DE"))],
@@ -82,11 +91,13 @@ async def location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton("Inghilterra GB", callback_data=str("set_location_GB"))],
     ]
 
+    # Inline keyboard per scegliere la posizione
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.edit_message_text("Scegli il tipo di sorting", 
+    await update.callback_query.edit_message_text("Scegli la posizione di ricerca", 
                                                    reply_markup=reply_markup)
 
-# Dizionario per gestire i callback
+# Dizionario per gestire i callback 
+# (callback = funzione passata come argomento, che verrà eseguita successivamente)
 callback_map = {
     'handler_sorting': sorting,
     'handler_location': location
@@ -96,16 +107,18 @@ callback_map = {
 
 # Funzione che chiama l'API per richiedere articoli al server tramite Browsing API
 async def browse_ebay(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Se l'utente non ha configurato la sua ricerca, questi sono i dati di default 
-    if "location" not in context.user_data: context.user_data["location"] = "IT"                
-    if "sorting" not in context.user_data: context.user_data["sorting"] = "MyGrading"      
+    # Se l'utente non ha configurato la sua ricerca, devo avere i dati inizializzati
+    init_variables(context)
     keyword = update.message.text
     
+    # Chiamo l'api "browseapi"
     api = BrowseAPI(APP_ID, CERT_ID)
 
+    # Non servirebbe mandare una foto, ma voglio fare si che il messaggio di attesa venga
+    # modificato per mostrare l'articolo. Per farlo i messaggi devon essere dello stesso tipo
     context.user_data["placeholder"] = await context.bot.send_photo(
         chat_id=update.message.chat_id,
-        caption=f"Ricerca avviata per: {keyword}",
+        caption=f"Ricerca avviata per:\n *{keyword}*",
         parse_mode="Markdown",
         photo="https://www.pngall.com/wp-content/uploads/13/eBay-Logo-PNG-Image.png"
     )
@@ -113,8 +126,7 @@ async def browse_ebay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # L'API utilizza chiamate HTTP bloccanti. Il bot di Telegram è asincrono
     # Telegram non aspetta la fine della chiamata e procede dritto
     # Bisogna usare un exploit per non bloccare il loop principale
-    # Questa funzioncina è un workaround
-    # Crea essenzialmente un thread e attende fino al completamento
+    # Questa funzioncina è un workaround che crea un thread e attende fino al completamento
     loop = asyncio.get_running_loop()
     response = await loop.run_in_executor(
         # Documentation https://developer.ebay.com/api-docs/buy/browse/resources/item_summary/methods/search
@@ -122,18 +134,23 @@ async def browse_ebay(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'q': keyword, 'limit': 50, 'filter': f"itemLocationCountry:{context.user_data['location']}"}])
     )
     
+    # Se non ottengo risultati
     try:
         raw_data = response[0].itemSummaries
     except (AttributeError, IndexError):
+        await context.user_data["placeholder"].delete()
         await update.message.reply_text("Nessun risultato trovato per la ricerca.")
         return
 
-    data = extractor(raw_data)    # Estraggo dalla response solo il necessario
+    # Estraggo dalla response solo il necessario
+    data = extractor(raw_data)   
 
+    # Ordino i dati estratti in base al sorting impostato
     data = sort_by_attribute(data, context)
+
+    # Salvo data e la mostro
     context.user_data["data"] = data
     context.user_data["current"] = 0
-
     await show_item(context)
 
 # Funzione che estrae i dati utili dalla response dell'API
@@ -152,6 +169,7 @@ def extractor(raw_data):
         except (ValueError, TypeError, AttributeError):
             conditionScore = 1
 
+        # Questi campi sono necessari per il calcolo del sorting
         price = int(float(item.price.value))
         shipping = int(float(shipping_price))
         total = price + shipping
@@ -160,6 +178,7 @@ def extractor(raw_data):
         feedback = fP * log10(fS + 1)
         myGrade = int(feedback + (1 / price) * 1000 + (100000 / conditionScore))
 
+        # Salvo l'elemento con gli attributi utili
         extracted.append({
             "title": item.title,
             "url": item.itemWebUrl,
@@ -177,6 +196,7 @@ def extractor(raw_data):
         })
     return extracted
 
+# Funzione che applica ai dati il sorting corretto
 def sort_by_attribute(data, context):
     sort = context.user_data["sorting"]
     sort_map = {
@@ -193,6 +213,7 @@ def sort_by_attribute(data, context):
 
 # Funzione che mostra l'articolo con index current
 async def show_item(context):
+    # Dati necessari
     idx = context.user_data["current"]
     data = context.user_data["data"]
     item = data[idx]
@@ -201,15 +222,15 @@ async def show_item(context):
     f"Condizioni: {item['condition']}\n"
     f"Score venditore: {item['feedbackP']}% ({item['feedbackS']})\n")
 
+    # Metodi per navigare gli articoli ottenuti
     keyboard = []
-    if idx > 0:
-        keyboard.append(InlineKeyboardButton("⬅️ Prev", callback_data="prev"))
-    if idx < len(data) - 1:
-        keyboard.append(InlineKeyboardButton("Next ➡️", callback_data="next"))
+    if idx > 0: keyboard.append(InlineKeyboardButton("⬅️ Prev", callback_data="prev"))
+    if idx < len(data) - 1: keyboard.append(InlineKeyboardButton("Next ➡️", callback_data="next"))
 
+    # Inline keyboard
     reply_markup = InlineKeyboardMarkup([keyboard]) if keyboard else None
 
-    # Edit media: photo + caption + buttons
+    # Modifico il messaggio precedente per non inondare la chat
     media = InputMediaPhoto(media=item['image'], caption=text, parse_mode="Markdown")
     await context.user_data["placeholder"].edit_media(media=media, reply_markup=reply_markup)
 
@@ -220,16 +241,19 @@ async def callback_manager(update, context):
     query = update.callback_query
     await query.answer()
 
+    # Gestisco gli handler
     if query.data.startswith("handler_"):
         # Recupera la funzione corrispondente al callback_data
         handler = callback_map.get(query.data)
         await handler(update, context)
+    # Gestisco la modifica delle impostazioni
     elif query.data.startswith("set_"):
         # Imposto la variabile (sfrutto la stringa callback_data)
         param = query.data.split("_")[1]
         new = query.data.split("_")[2]
         context.user_data[param] = new 
         await update.callback_query.edit_message_text(f"Modifica eseguita! ({param}:{new})")
+    # Gestisco il cambio di messaggi
     else:
         if query.data == "prev":
             context.user_data["current"] -= 1
