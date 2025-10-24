@@ -3,7 +3,8 @@
 Un bot Telegram per cercare articoli su eBay utilizzando:
 - la **eBay Browse API**
 - la libreria **python-telegram-bot**
-Permette agli utenti di cercare prodotti, eprsoalizzando le impostazioni di ricerca.
+
+Permette agli utenti di cercare prodotti, persoalizzando le impostazioni di ricerca.
 Sono disponibili vari tipi di sorting
 
 ---
