@@ -9,7 +9,7 @@ Sono disponibili vari tipi di sorting
 
 ---
 
-## 🚀 Funzionalità
+## Funzionalità
 
 - Cerca prodotti su eBay scrivendo semplicemente il nome
 - Ordinamento per:
